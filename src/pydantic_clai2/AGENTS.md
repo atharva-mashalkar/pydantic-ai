@@ -209,7 +209,7 @@ bundled palettes use Termflow defaults.
 | `model_picker.py` | `/model`: selection and completion of saved models |
 | `model_catalog.py` | model sources (genai-prices today) merged by `catalog()` |
 | `model_settings.py` | `ModelSettingsForm`, the editable subset of `ModelSettings` |
-| `logfire.py` | the default-enabled, locally configured Logfire plugin over core `Instrumentation` |
+| `logfire.py` | the default-enabled, locally configured Logfire plugin over core `Instrumentation`, with a `@host.configure` settings menu |
 | `compaction.py` | the built-in `compaction` plugin: harness `FallbackCompaction([SummarizingCompaction, SlidingWindowCompaction])`, `/compact`, the context alert |
 | `commands.py` | `Command`, the registry, completion |
 | `usage_report.py` | `/usage`, `/cost`, and the footer cost, derived from `Session.messages` |

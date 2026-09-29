@@ -16,6 +16,7 @@ from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from pydantic import JsonValue, ValidationError
 from rich.console import Console
+from termflow.tui.menu import MenuResult
 
 from pydantic_ai import Agent, BinaryContent
 from pydantic_ai.capabilities import Instrumentation
@@ -23,10 +24,11 @@ from pydantic_ai.models.instrumented import InstrumentationSettings
 from pydantic_ai.models.test import TestModel
 from pydantic_clai2 import DEFAULT_PLUGINS
 from pydantic_clai2.commands import Commands
-from pydantic_clai2.logfire import activate
+from pydantic_clai2.logfire import CREDENTIALS_FILE, LogfireSource, activate, logfire_dir
 from pydantic_clai2.plugin_loader import PluginError, PluginLoader
 from pydantic_clai2.plugins import PluginHost, SessionEnd, SessionStart
 from pydantic_clai2.settings_store import SettingsStore
+from tests.clai2.menu_script import Script, pick, typed
 
 
 class Exporter(InMemorySpanExporter):
@@ -415,3 +417,87 @@ async def test_interrupted_startup_shuts_down_plugin_providers(
     assert recorder.exporters[0].closed
     assert not loader.capabilities()
     assert loader.entries()[0].host is None
+
+
+def logfire_loader(tmp_path: Path) -> tuple[PluginLoader[None], SettingsStore]:
+    store = SettingsStore(tmp_path / 'config.db')
+    loader: PluginLoader[None] = PluginLoader(
+        store=store,
+        console=Console(file=io.StringIO()),
+        commands=Commands(),
+        session_start=lambda: SessionStart(agent=Agent(TestModel()), settings=store.load()),
+        builtin=(next(plugin for plugin in DEFAULT_PLUGINS if plugin.id == 'logfire'),),
+    )
+    return loader, store
+
+
+async def test_menu_saves_every_option_and_reloads_with_them(
+    tmp_path: Path, recorder: Recorder, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    scripted = Script(
+        lists=[
+            pick('send_to_logfire'),
+            pick('service_name'),
+            pick('include_content'),
+            pick('include_binary_content'),
+            MenuResult(cancelled=True),
+        ],
+        choices=[pick('false'), pick('false'), pick('false')],
+        texts=[typed('my-clai')],
+    )
+    monkeypatch.setattr('pydantic_clai2.logfire.RUNNERS', scripted.runners)
+    loader, store = logfire_loader(tmp_path)
+    try:
+        await loader.load_all()
+        assert loader.configurable('logfire')
+        assert await loader.command(['configure', 'logfire']) == (
+            'Saved Send to Logfire.\nSaved Service name.\nSaved Message content.\nSaved Binary content.'
+        )
+        [declaration] = store.plugins()
+        assert declaration.settings == {
+            'service_name': 'my-clai',
+            'send_to_logfire': False,
+            'include_content': False,
+            'include_binary_content': False,
+        }
+        assert [options['service_name'] for options in recorder.options] == ['pydantic-clai2', 'my-clai']
+        assert recorder.options[-1]['send_to_logfire'] is False
+        assert recorder.exporters[0].closed
+    finally:
+        await loader.close('exit')
+
+
+async def test_closing_the_menu_unchanged_keeps_the_running_plugin(
+    tmp_path: Path, recorder: Recorder, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    scripted = Script(lists=[MenuResult(cancelled=True)], choices=[], texts=[])
+    monkeypatch.setattr('pydantic_clai2.logfire.RUNNERS', scripted.runners)
+    loader, _ = logfire_loader(tmp_path)
+    try:
+        await loader.load_all()
+        assert await loader.configure('logfire') == 'Logfire settings unchanged.'
+        assert len(recorder.instances) == 1
+    finally:
+        await loader.close('exit')
+
+
+def test_menu_validates_resets_and_notes_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
+    source = LogfireSource(make_host(service_name='custom', include_content=False))
+    rows = {row.key: row for row in source.rows()}
+    assert source.title == 'Logfire traces'
+    assert rows['send_to_logfire'].note == 'no LOGFIRE_TOKEN or credentials file'
+    assert source.current(rows['send_to_logfire']) == 'if-token-present'
+    assert source.current(rows['include_content']) == 'false'
+    assert source.problem(rows['service_name'], '') == 'String should have at least 1 character'
+    assert source.problem(rows['include_content'], 'maybe') == 'Input should be a valid boolean'
+    assert source.problem(rows['send_to_logfire'], 'always') is not None
+    assert source.problem(rows['service_name'], 'true') is None
+    assert source.reset(rows['service_name']) == 'Reset Service name.'
+    assert source.current(rows['service_name']) == 'pydantic-clai2'
+    assert source.current(rows['include_content']) == 'false'
+    directory = logfire_dir()
+    directory.mkdir(parents=True)
+    (directory / CREDENTIALS_FILE).write_text('{}')
+    assert source.rows()[0].note == 'credentials file found'
+    monkeypatch.setenv('LOGFIRE_TOKEN', 'write-token')
+    assert source.rows()[0].note == 'LOGFIRE_TOKEN is set'

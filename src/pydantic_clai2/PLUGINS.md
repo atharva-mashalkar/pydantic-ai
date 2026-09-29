@@ -293,7 +293,11 @@ telemetry destination through its own files. Without credentials the default
 such as explicit OTLP exporters, still applies.
 
 Manage it with `/plugins disable logfire`, `/plugins enable logfire`, or
-`/plugins reload logfire`. To change its defaults:
+`/plugins reload logfire`. Change its options in the settings menu that
+`/plugins configure logfire` (or `C` on `logfire` in `/plugins`) opens: each
+edit saves at once, and the plugin is loaded again when you close the menu, so
+the next run uses it. The **Send to Logfire** row notes whether `LOGFIRE_TOKEN`
+or a credentials file was found. Scripts can replace the declaration instead:
 
 ```text
 /plugins add logfire pydantic_clai2.logfire '{"include_content": false, "include_binary_content": false}'

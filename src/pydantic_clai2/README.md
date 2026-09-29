@@ -1440,13 +1440,18 @@ destination. Review that destination before supplying
 credentials. Keep tokens out of plugin settings, which are saved as plaintext.
 
 ```text
+/plugins configure logfire
 /plugins disable logfire
 /plugins enable logfire
 /plugins reload logfire
 /plugins add logfire pydantic_clai2.logfire '{"include_content": false, "include_binary_content": false}'
 ```
 
-The last command replaces the built-in configuration. Its options are
+`/plugins configure logfire`, or `C` on `logfire` in `/plugins`, opens its
+settings menu: each edit saves at once and applies from the next run, and the
+**Send to Logfire** row notes whether `LOGFIRE_TOKEN` or a credentials file was
+found. The last command replaces the built-in configuration instead. Its
+options are
 `service_name` (default `pydantic-clai2`), `include_content` (default `true`),
 `include_binary_content` (default `true`), and `send_to_logfire` (either
 `"if-token-present"` or `false`). The plugin explicitly sets the latter, rather

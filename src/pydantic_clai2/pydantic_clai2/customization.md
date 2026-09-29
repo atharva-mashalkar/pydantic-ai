@@ -136,7 +136,9 @@ stock CLI. It contributes core's Instrumentation capability using an isolated
 Logfire instance. It exports to Logfire only when credentials are present, with
 no interactive setup or console logging. Text and binary images are included by
 default, so review the telemetry destination before setting LOGFIRE_TOKEN. Use
-/plugins disable logfire to remove it, or replace its settings with:
+/plugins disable logfire to remove it, and /plugins configure logfire (or C in
+/plugins) to open its settings menu. Each edit saves at once and applies from the
+next run. You can also replace its settings with:
 
 ```text
 /plugins add logfire pydantic_clai2.logfire '{"include_content": false, "include_binary_content": false}'
